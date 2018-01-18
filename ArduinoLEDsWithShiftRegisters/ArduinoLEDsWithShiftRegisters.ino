@@ -1,14 +1,15 @@
-﻿int latchPin = 8;
-int clockPin = 12;
-int dataPin = 11;
-
-int numOfRegisters = 2;
+#define latchPin 7           // Shift register latch pin (pin 12, ST_CP)
+#define clockPin 8           // Shift register clock pin (pin 11, SH_CP)
+#define dataPin 6            // Shift register data pin (pin 14, DS - Serial Out)
+#define dimmPin 9            // Shift register brightness (pin 13, OutputEnable) (Optional)
+#define numOfRegisters 3     // Number of shift registers in use
+int lednum = 8 * numOfRegisters;  // Calculate number of LEDs (presuming 8 per register)
 byte* registerState;
 
-long effectId = 0;
-long prevEffect = 0;
-long effectRepeat = 0;
-long effectSpeed = 30;
+int effectId = 0;            // Current running effect
+int effectPrev = 0;          // Previous effect (so we don't double)
+int effectRepeat = 0;        // Times to repeat effect
+int effectSpeed = 0;         // Speed of effect
 
 void setup() {
 	//Initialize array
@@ -21,129 +22,115 @@ void setup() {
 	pinMode(latchPin, OUTPUT);
 	pinMode(clockPin, OUTPUT);
 	pinMode(dataPin, OUTPUT);
+	pinMode(dimmPin, OUTPUT);
+	analogWrite(dimmPin, 100); // Set brightness (255 = Off, 0 = Full)
 }
 
 void loop() {
-	do{
-		effectId = random(6);
+	// Set a random effect
+	do {
+		effectId = random(5);
 	} while (effectId == prevEffect);
 	prevEffect = effectId;
 
-	switch (effectId)
-	{
-	case 0:
-		effectRepeat = random(1, 2);
-		break;
-	case 1:
-		effectRepeat = random(1, 2);
-		break;
-	case 3:
+	// Set random repeat of effect
+	switch (effectId) {
+	case 2:
 		effectRepeat = random(1, 5);
 		break;
-	case 4:
-		effectRepeat = random(1, 2);
-		break;
-	case 5:
+	default:
 		effectRepeat = random(1, 2);
 		break;
 	}
 
 	for (int i = 0; i < effectRepeat; i++) {
+		// Set random speed for effect
 		effectSpeed = random(10, 90);
 
-		switch (effectId)
-		{
+		switch (effectId) {
 		case 0:
-			effectA(effectSpeed);
+			effectA();
 			break;
 		case 1:
-			effectB(effectSpeed);
+			effectB();
 			break;
 		case 3:
-			effectC(effectSpeed);
+			effectC();
 			break;
 		case 4:
-			effectD(effectSpeed);
+			effectD();
 			break;
 		case 6:
-			effectE(effectSpeed);
+			effectE();
 			break;
 		}
 	}
 }
 
-void effectA(int speed){
-	for (int i = 0; i < 16; i++){
-		for (int k = i; k < 16; k++){
+void effectA() {
+	for (int i = 0; i < lednum; i++) {
+		for (int k = i; k < lednum; k++) {
 			regWrite(k, HIGH);
-			delay(speed);
+			delay(effectSpeed);
 			regWrite(k, LOW);
 		}
-
 		regWrite(i, HIGH);
 	}
 }
 
-void effectB(int speed){
-	for (int i = 15; i >= 0; i--){
+void effectB() {
+	for (int i = lednum; i >= 0; i--) {
 		for (int k = 0; k < i; k++){
 			regWrite(k, HIGH);
-			delay(speed);
+			delay(effectSpeed);
 			regWrite(k, LOW);
 		}
-
-		regWrite(i, HIGH);
+		if (i != lednum) regWrite(i, HIGH);
 	}
 }
 
-void effectC(int speed){
+void effectC() {
 	int prevI = 0;
-	for (int i = 0; i < 16; i++){
+	for (int i = 0; i < lednum; i++) {
 		regWrite(prevI, LOW);
 		regWrite(i, HIGH);
 		prevI = i;
-
-		delay(speed);
+		delay(effectSpeed);
 	}
-
-	for (int i = 15; i >= 0; i--){
+	for (int i = (lednum - 1); i >= 0; i--) {
 		regWrite(prevI, LOW);
 		regWrite(i, HIGH);
 		prevI = i;
-
-		delay(speed);
+		delay(effectSpeed);
 	}
 }
 
-void effectD(int speed){
-	for (int i = 0; i < 8; i++){
-		for (int k = i; k < 8; k++)
-		{
+void effectD() {
+	for (int i = 0; i < lednum / 2; i++) {
+		for (int k = i; k < lednum / 2; k++) {
 			regWrite(k, HIGH);
-			regWrite(15 - k, HIGH);
-			delay(speed);
+			regWrite(lednum - 1 - k, HIGH);
+			delay(effectSpeed);
 			regWrite(k, LOW);
-			regWrite(15 - k, LOW);
+			regWrite(lednum - 1 - k, LOW);
 		}
-
 		regWrite(i, HIGH);
-		regWrite(15 - i, HIGH);
+		regWrite(lednum - 1 - i, HIGH);
 	}
 }
 
-void effectE(int speed){
-	for (int i = 7; i >= 0; i--){
-		for (int k = 0; k <= i; k++)
-		{
+void effectE() {
+	for (int i = (lednum / 2) - 1; i >= 0; i--) {
+		for (int k = 0; k <= i; k++) {
 			regWrite(k, HIGH);
-			regWrite(15 - k, HIGH);
-			delay(speed);
+			regWrite(lednum - 1 - k, HIGH);
+			delay(effectSpeed);
 			regWrite(k, LOW);
-			regWrite(15 - k, LOW);
+			regWrite(lednum - 1 - k, LOW);
 		}
 
 		regWrite(i, HIGH);
-		regWrite(15 - i, HIGH);
+		regWrite(lednum - 1 - i, HIGH);
 	}
 }
 
@@ -152,23 +139,18 @@ void regWrite(int pin, bool state){
 	int reg = pin / 8;
 	//Determines pin for actual register
 	int actualPin = pin - (8 * reg);
-
 	//Begin session
 	digitalWrite(latchPin, LOW);
-
 	for (int i = 0; i < numOfRegisters; i++){
 		//Get actual states for register
 		byte* states = &registerState[i];
-
 		//Update state
 		if (i == reg){
 			bitWrite(*states, actualPin, state);
 		}
-
 		//Write
 		shiftOut(dataPin, clockPin, MSBFIRST, *states);
 	}
-
 	//End session
 	digitalWrite(latchPin, HIGH);
 }
